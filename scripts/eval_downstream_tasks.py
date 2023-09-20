@@ -38,7 +38,7 @@ def main(args):
     model = get_model(
         args.model, args.tokenizer_path, args.max_length, args.truncation_side,
         args.fp16, args.load_in_4bit, args.device_map,
-        args.use_lambda_attention, args.efficient_implementation,
+        args.use_lambda_attention,
         args.local_branch, args.global_branch,
         args.limit_distance, args.triangle_offset, args.constant_answer)
     dataloader = DataLoader(data["data"],

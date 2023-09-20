@@ -131,8 +131,26 @@ class Lambda_Attention_Matrix:
         self.attn.mul_(scalar).clamp_(min=self.min_value)
         return self
 
+    def local_branch_add(self, other):
+        self.attn[..., -self.local_branch*2:].add_(other).clamp_(
+            min=self.min_value)
+        return self
+
+    def global_branch_add(self, other):
+        self.attn[..., :-self.local_branch*2].add_(other).clamp_(
+            min=self.min_value)
+        return self
+
+    def dropout(self, dropout):
+        self.attn = dropout(self.attn)
+        return self
+
     def softmax(self):
         self.attn = self.attn.softmax(-1)
+        return self
+
+    def to(self, destination):
+        self.attn = self.attn.to(destination)
         return self
 
     def matmul(self, value):

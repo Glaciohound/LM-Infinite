@@ -13,7 +13,7 @@ This is reproduction of the paper
 in PyTorch.
 The work is done by [Chi Han](https://glaciohound.github.io), Qifan Wang, Wenhan Xiong, Yu Chen, Heng Ji, Sinong Wang.
 
-In this paper, the authors propose a simple method, called LM-Infinite, to improve the length generalization of large language models, without any additional training or parameter updates.
+In this paper, the authors propose a simple method, called LM-Infinite, to improve the length generalization of large language models to as long as 128k tokens, without any additional training or parameter updates.
 The key idea is to use (1) a $\Lambda$-shaped attention pattern, so that each token only attends to the nearest $L_{pretrain}$ tokens as well as a few starting tokens, and (2) a distance limit $L_{pretrain}$, so that the attention distance is capped at $L_{pretrain}$.
 The proposed method is compatible with multiple state-of-the-art language models, including but not limited to LLaMA, Llama-2, GPT-J, MPT-7B series.
 LM-Infinite is also computational efficient, with only $O(n)$ time complexity.
@@ -169,7 +169,7 @@ MASTER_PORT=$(shuf -i 29500-65535 -n 1)
 PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_ppl_deepspeed.py \
     --deepspeed_config configs/zero3_efficient_config.json \
     --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
-    --use_lambda_attention --efficient_implementation --local_branch 4096 --global_branch 100 --limit_distance 4096 \
+    --use_lambda_attention --local_branch 4096 --global_branch 100 --limit_distance 4096 \
     --dataset the_pile --dataset_group ArXiv --split test --dataset_dir ${PILE_PATH} \
     --max_length 32770 \
     --log_dir $LOG_DIR/$TRIAL
@@ -182,12 +182,11 @@ A brief explanation of the arguments:
 - `--local_branch`: the local branch size. 2048 for LLaMA, MPT-7B and GPT-J (Required for LM-Infinite)
 - `--global_branch`: the global branch size. Range 10-100 gives generally similar effect. (Required for LM-Infinite)
 - `--limit_distance`: the distance limit. 2048 for LLaMA, MPT-7B and GPT-J (Required for LM-Infinite)
-- `--efficient_implementation`: use efficient implementation of lambda attention. (Optional)
 - `--dataset`: the dataset name. See [data/get_data.py](data/get_data.py) to figure how to use custom datasets.
 
 
 If you want to evaluate on vanilla models without LM-Infinite, simply remove the 
-`--use_lambda_attention --efficient_implementation --local_branch 4096 --global_branch 100 --limit_distance 4096 `
+`--use_lambda_attention --local_branch 4096 --global_branch 100 --limit_distance 4096 `
 argument set.
 
 If you want only to evaluate on a subset of the test set, you can use the `--start_data_from` argument to specify the starting index of the test set, and/or `--max_data_num` to specify the number of examples after that index.

@@ -35,7 +35,7 @@ def parse_args():
     parser.add_argument("--api_token", type=str)
 
     parser.add_argument("--use_lambda_attention", action="store_true")
-    parser.add_argument("--efficient_implementation", action="store_true")
+    # parser.add_argument("--efficient_implementation", action="store_true")
     parser.add_argument("--local_branch", type=int, default=2048)
     parser.add_argument("--global_branch", type=int, default=100)
     parser.add_argument("--limit_distance", type=int, default=None)

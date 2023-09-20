@@ -7,12 +7,11 @@ from .constant import ConstantModel
 def get_model(
     model_name_or_path, tokenizer_path, max_length, truncation_side,
     fp16, load_in_4bit, device_map,
-    use_lambda_attention, efficient_implementation,
+    use_lambda_attention,
     local_branch, global_branch,
     limit_distance, triangle_offset, constant_answer
 ):
-    hack_args = (use_lambda_attention, efficient_implementation,
-                 local_branch, global_branch,
+    hack_args = (use_lambda_attention, local_branch, global_branch,
                  limit_distance, triangle_offset)
     if model_name_or_path == "EleutherAI/gpt-j-6b":
         model = GPT_J_Model(
