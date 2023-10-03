@@ -32,7 +32,7 @@ def main(args):
         data["metadata"]["recommended_length"]
     metric_func = data["metadata"]["metric_func"]
     print("dataset size: ", len(data["data"]))
-    print("recommended_length: ", max_generation_length)
+    print("generation length: ", max_generation_length)
 
     print("loading model...")
     model = get_model(

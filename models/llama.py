@@ -9,13 +9,6 @@ from .model_base import Model_Base
 from .lambda_attention import lambda_matmul
 
 
-def _prepare_decoder_attention_mask_factory():
-    def _product_fn(attention_mask, input_shape,
-                    inputs_embeds, past_key_values_length):
-        return None
-    return _product_fn
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -174,11 +167,17 @@ def attn_forward_factory(
             #     pickle.dump(entropy.cpu().numpy(), f)
             # exit()
             # 3. implicit position information
-            # import pickle
-            # features = query_states[0, 0]
-            # with open('features.pkl', 'wb') as f:
-            #     pickle.dump(features.cpu().numpy(), f)
-            # exit()
+            # if print_or_not:
+            #     import pickle
+            #     import os
+            #     if os.path.exists('features.pkl'):
+            #         with open('features.pkl', 'rb') as f:
+            #             features = pickle.load(f)
+            #     else:
+            #         features = []
+            #     features.append(query_states[0, 0].cpu().numpy())
+            #     with open('features.pkl', 'wb') as f:
+            #         pickle.dump(features, f)
 
         attn_output = query_states
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -227,11 +226,7 @@ class LLAMA_Model(Model_Base):
         self.limit_distance = limit_distance
         self.triangle_offset = triangle_offset
 
-        if use_lambda_mask:
-            self.model.model._prepare_decoder_attention_mask = \
-                _prepare_decoder_attention_mask_factory()
-
-        for hidden_layer in self.model.model.layers:
+        for layer_i, hidden_layer in enumerate(self.model.model.layers):
             attn = hidden_layer.self_attn
             attn.forward = attn_forward_factory(
                 attn, use_lambda_mask, local_branch, global_branch,

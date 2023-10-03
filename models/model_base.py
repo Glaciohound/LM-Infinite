@@ -68,13 +68,15 @@ class Model_Base(nn.Module):
         output["token_nll_list"] = token_nll_list
         return output
 
-    def generate(self, input_ids, attention_mask, max_generation_length,
+    def generate(self, input_ids, attention_mask,
+                 max_generation_length, min_new_tokens,
                  suppress_tokens, do_sample):
         output_ids = self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
             do_sample=do_sample,
             max_new_tokens=max_generation_length,
+            min_new_tokens=min_new_tokens,
             suppress_tokens=suppress_tokens,
         )
         decoded = [

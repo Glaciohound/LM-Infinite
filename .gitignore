@@ -163,6 +163,7 @@ cython_debug/
 # Repository specific
 _logs/
 _legacy/
+test*
 data/longbench/
 data/zero_scrolls/
 today.md

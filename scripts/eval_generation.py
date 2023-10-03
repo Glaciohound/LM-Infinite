@@ -61,12 +61,22 @@ def main(args):
             for position in args.evaluate_positions:
                 if input_ids.shape[1] <= position:
                     continue
-                generation = model.generate(
-                    input_ids[:, :position],
-                    attention_mask[:, :position],
+                if args.runtime_truncation is not None:
+                    runtime_input_ids = input_ids[
+                        :, max(0, position-args.runtime_truncation): position]
+                    runtime_attention_mask = attention_mask[
+                        :, max(0, position-args.runtime_truncation): position]
+                else:
+                    runtime_input_ids = input_ids[:, :position]
+                    runtime_attention_mask = attention_mask[:, :position]
+
+                generation, generation_ids = model.generate(
+                    runtime_input_ids, runtime_attention_mask,
                     args.max_generation_length,
-                    args.suppress_tokens, args.do_sample
-                )[0][0]
+                    args.min_new_tokens,
+                    args.suppress_tokens, args.do_sample,
+                )
+                generation = generation[0]
                 generation_results[position] = {
                     "generation": generation,
                     "target": model.tokenizer.decode(
@@ -85,6 +95,8 @@ def main(args):
                     all_results, args.evaluate_positions
                 )
                 print(scores)
+            else:
+                scores = None
 
             with open(os.path.join(args.log_dir, "results.pkl"), "wb") as f:
                 pickle.dump([all_results, scores], f)

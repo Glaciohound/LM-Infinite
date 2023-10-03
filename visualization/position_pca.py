@@ -4,13 +4,17 @@ import matplotlib.pyplot as plt
 import sys
 import pickle
 from sklearn.decomposition import PCA
+import numpy as np
 
 input_file = sys.argv[1]
 
 with open(input_file, "rb") as f:
     data = pickle.load(f)
 
-data = data[:4096]
+data = np.stack(data)
+
+data = data[:16, :4096].transpose(1, 0, 2)
+data = data.reshape(-1, *data.shape[2:])
 pca = PCA(n_components=2)
 pca.fit(data)
 transformed = pca.transform(data)
@@ -22,5 +26,5 @@ colors = [
     for i in range(n)
 ]
 
-plt.scatter(transformed[:, 0], transformed[:, 1], s=2, c=colors)
+plt.scatter(transformed[:, 0], transformed[:, 1], s=0.1, c=colors)
 plt.show()

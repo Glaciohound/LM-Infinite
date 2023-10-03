@@ -18,8 +18,10 @@ def parse_args():
     parser.add_argument("--fp16", action="store_true")
     parser.add_argument("--no_device_mapping", action="store_true")
     parser.add_argument("--max_generation_length", type=int, default=None)
+    parser.add_argument("--min_new_tokens", type=int, default=None)
     parser.add_argument("--max_length", type=int, default=None)
     parser.add_argument("--truncation_side", type=str, default="right")
+    parser.add_argument("--runtime_truncation", type=int, default=None)
     parser.add_argument("--load_in_4bit", action="store_true")
     parser.add_argument("--device_map", type=str, default=None)
 
