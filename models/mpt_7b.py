@@ -193,3 +193,12 @@ class MPT_7B_Model(Model_Base):
                 use_lambda_mask, local_branch, global_branch,
                 limit_distance, triangle_offset
             )
+
+
+def convert_mpt_model(model, local_branch, global_branch):
+    for hidden_layer in model.transformer.blocks:
+        attn = hidden_layer.attn
+        attn.attn_fn = attn_forward_factory(
+            True, local_branch, global_branch,
+            local_branch, 0
+        )

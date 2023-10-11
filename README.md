@@ -21,6 +21,33 @@ LM-Infinite is also computational efficient, with only $O(n)$ time complexity.
 
 
 
+## :tada::tada::tada: Now A Drop-in Replacement for HuggingFace Transformers!
+
+
+We have implemented the LM-Infinite method as a drop-in replacement for HuggingFace Transformers.
+After you load the Transformers models, and if it is a Llama model, an MPT model, or a GPT-J model, you can run the following codes to enable LM-Infinite.
+
+
+For Llama model:
+```
+from models.llama import convert_llama_model
+model = convert_llama_model(model, 4096, 10)
+```
+
+For MPT model:
+```
+from models.mpt_7b import convert_mpt_model
+model = convert_mpt_model(model, 4096, 10)
+```
+
+For GPT-J model:
+```
+from models.gpt_j import convert_gpt_j_model
+model = convert_gpt_j_model(model, 4096, 10)
+```
+
+Then, you can use the model as usual!
+
 
 
 ## Requirements

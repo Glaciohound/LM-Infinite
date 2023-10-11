@@ -253,3 +253,20 @@ class GPT_J_Model(Model_Base):
                 attn, use_lambda_mask, local_branch, global_branch,
                 limit_distance, triangle_offset
             )
+
+
+def convert_gpt_j_model(model, local_branch, global_branch):
+    max_length = 128000
+    for hidden_layer in model.transformer.h:
+        attn = hidden_layer.attn
+        attn.embed_positions = create_sinusoidal_positions(
+            max_length, attn.rotary_dim or attn.embed_dim)
+        attention_mask = None
+        attn.register_buffer(
+            "bias", attention_mask,
+            persistent=False,
+        )
+        attn.forward = attn_forward_factory(
+            attn, True, local_branch, global_branch,
+            local_branch, 0
+        )

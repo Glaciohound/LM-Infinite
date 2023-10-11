@@ -40,6 +40,7 @@ def attn_forward_factory(
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        padding_mask: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -240,3 +241,12 @@ class LLAMA_Model(Model_Base):
         self.device = device
         self.model.to(device)
         return self
+
+
+def convert_llama_model(model, local_branch, global_branch):
+    for layer_i, hidden_layer in enumerate(model.model.layers):
+        attn = hidden_layer.self_attn
+        attn.forward = attn_forward_factory(
+            attn, True, local_branch, global_branch, local_branch, 0
+        )
+    return model
