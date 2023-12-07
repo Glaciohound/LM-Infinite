@@ -6,6 +6,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--log_dir", type=str)
     parser.add_argument("--local_rank", type=int, default=0)
+    parser.add_argument("--silent", action="store_true")
 
     parser.add_argument("--model", type=str)
     parser.add_argument("--tokenizer_path", type=str)
@@ -44,6 +45,7 @@ def parse_args():
     parser.add_argument("--triangle_offset", type=float, default=0.0)
     parser.add_argument("--deepspeed_config", type=str, default=None)
     parser.add_argument("--constant_answer", type=str, default="")
+    parser.add_argument("--top_k_attention", type=int, default=None)
 
     args = parser.parse_args()
 

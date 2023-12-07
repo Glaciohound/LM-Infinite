@@ -9,7 +9,8 @@ def get_model(
     fp16, load_in_4bit, device_map,
     use_lambda_attention,
     local_branch, global_branch,
-    limit_distance, triangle_offset, constant_answer
+    limit_distance, triangle_offset, constant_answer,
+    top_k_attention
 ):
     hack_args = (use_lambda_attention, local_branch, global_branch,
                  limit_distance, triangle_offset)
@@ -27,7 +28,8 @@ def get_model(
     elif "llama-2" in model_name_or_path:
         model = LLAMA_Model(
             model_name_or_path, tokenizer_path, max_length, truncation_side,
-            load_in_4bit, device_map, *hack_args
+            load_in_4bit, device_map, *hack_args,
+            top_k_attention
         )
     elif model_name_or_path.startswith("mosaicml/mpt-7b"):
         model = MPT_7B_Model(

@@ -30,7 +30,7 @@ def apply_rotary_pos_emb(vec, cos, sin, position_ids):
 # Efficient implementation using `models/lambda_attention.py`
 def attn_forward_factory(
     self, use_lambda_mask, local_branch, global_branch,
-    limit_distance, triangle_offset
+    limit_distance, triangle_offset, top_k_attention
 ):
 
     def limited_distance_forward(
@@ -113,22 +113,16 @@ def attn_forward_factory(
                 attn_weights = rot_query_states[:, head_i].matmul(
                     rot_key_states[:, head_i].transpose(1, 2)) / math.sqrt(self.head_dim)
 
+                attn_stationary = stationary_query_states[:, head_i].matmul(
+                    stationary_key_states[:, head_i].transpose(1, 2)
+                ) / math.sqrt(self.head_dim)
+
                 if limit_distance is not None:
                     attn_weights = attn_weights.triu(-local_branch+1+kv_seq_len-q_len)
-
-                    # stationary query and key states for limited distance attention
-                    stationary_key_states = key_states
-                    effective_limit_distance = min(limit_distance, kv_seq_len-1)
-                    stationary_query_states = \
-                        (query_states * cos[0, 0, effective_limit_distance]) + \
-                        (rotate_half(query_states) * sin[0, 0, effective_limit_distance])
-
                     # lower-triangular limited distance zone
-                    attn_weights += \
-                        stationary_query_states[:, head_i].matmul(
-                            stationary_key_states[:, head_i].transpose(1, 2)
-                        ).tril(-limit_distance+kv_seq_len-q_len
-                               ) / math.sqrt(self.head_dim)
+                    attn_weights += attn_stationary.tril(
+                        -limit_distance+kv_seq_len-q_len
+                    )
 
                 # triangular mask zone
                 if triangle_offset != 0:
@@ -146,6 +140,37 @@ def attn_forward_factory(
                         torch.tensor(torch.finfo(attn_weights.dtype).min,
                                      device=device)
                     )
+
+                if top_k_attention is not None:
+                    lambda_mask = torch.ones_like(attn_weights).to(bool)
+                    lambda_mask = lambda_mask.tril(
+                        -limit_distance+kv_seq_len-q_len)
+                    lambda_mask[..., :global_branch] = False
+                    attn_weights.masked_fill_(
+                        lambda_mask, torch.finfo(attn_weights.dtype).min)
+
+                    line_i = q_len - 1
+                    col_high = line_i - local_branch + 1 + kv_seq_len - q_len
+
+                    # version 2: at middle position
+                    # TODO: check if this is necessary and remove magic number
+                    near_query_states = \
+                        (query_states * cos[0, 0, 2000]) + \
+                        (rotate_half(query_states) * sin[0, 0, 2000])
+                    near_attention = near_query_states[:, head_i, line_i].matmul(
+                        stationary_key_states[:, head_i].transpose(1, 2)
+                    ) / math.sqrt(self.head_dim)
+                    line_attention = near_attention[..., global_branch: col_high]
+                    top_k_indices = torch.topk(
+                        line_attention, top_k_attention, dim=-1)[1]
+                    top_k_mask = torch.ones_like(line_attention).to(bool)
+                    top_k_mask.scatter_(-1, top_k_indices, 0)
+
+                    attn_weights[:, line_i, global_branch: col_high] = \
+                        line_attention.masked_fill(
+                            top_k_mask, torch.finfo(line_attention.dtype).min
+                        )
+
 
                 query_states[:, head_i] = torch.matmul(
                     F.softmax(
@@ -207,7 +232,7 @@ class LLAMA_Model(Model_Base):
         self, model_name_or_path, tokenizer_path, max_length, truncation_side,
         load_in_4bit, device_map,
         use_lambda_mask, local_branch, global_branch,
-        limit_distance, triangle_offset
+        limit_distance, triangle_offset, top_k_attention
     ):
         super().__init__(max_length, truncation_side)
         self.tokenizer = LlamaTokenizer.from_pretrained(tokenizer_path)
@@ -226,12 +251,13 @@ class LLAMA_Model(Model_Base):
         self.global_branch = global_branch
         self.limit_distance = limit_distance
         self.triangle_offset = triangle_offset
+        self.top_k_attention = top_k_attention
 
         for layer_i, hidden_layer in enumerate(self.model.model.layers):
             attn = hidden_layer.self_attn
             attn.forward = attn_forward_factory(
                 attn, use_lambda_mask, local_branch, global_branch,
-                limit_distance, triangle_offset
+                limit_distance, triangle_offset, top_k_attention
             )
 
     def to(self, device):

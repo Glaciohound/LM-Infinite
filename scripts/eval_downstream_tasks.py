@@ -40,7 +40,9 @@ def main(args):
         args.fp16, args.load_in_4bit, args.device_map,
         args.use_lambda_attention,
         args.local_branch, args.global_branch,
-        args.limit_distance, args.triangle_offset, args.constant_answer)
+        args.limit_distance, args.triangle_offset, args.constant_answer,
+        args.top_k_attention,
+    )
     dataloader = DataLoader(data["data"],
                             batch_size=args.batch_size, shuffle=False)
 
@@ -58,28 +60,40 @@ def main(args):
     all_target = []
     all_output = []
     all_ids = []
-    for batch in tqdm(dataloader):
+    pbar = tqdm(dataloader)
+    for batch in pbar:
         with torch.no_grad():
             input_ids, attention_mask = model.tokenize(
                 batch["prompt"])
             input_length = input_ids.shape[1]
-            if input_length < 4096:
-                continue
+            # if input_length < 4096:
+            #     continue
             target = batch["output"]
             input_ids = input_ids.to(device)
             attention_mask = attention_mask.to(device)
             output, output_ids = model.generate(
-                input_ids, attention_mask, max_generation_length,
-                args.suppress_tokens, args.do_sample)
-            # print(model.tokenizer.convert_ids_to_tokens(
-            #     output_ids[0, input_ids.shape[1]:]))
-            print("Prediction:", output[0].strip())
-            print("References:", target[0])
+                input_ids, attention_mask,
+                max_generation_length,
+                args.min_new_tokens,
+                args.suppress_tokens, args.do_sample,
+            )
+            # TODO: debug code, remove later
+            answer_prefix = batch["prompt"][0][
+                :batch["prompt"][0].index(target[0]) + len(target[0])
+            ]
+            distance_till_end = input_length - \
+                model.tokenize(answer_prefix)[0].shape[1]
             all_target.extend(target)
             all_output.extend(output)
             all_ids.extend(batch["id"])
-            print(args.dataset_group, "score :",
-                  metric_func(all_output, all_target, batch))
+            score_text = f"{args.dataset_group}: "\
+                f"{metric_func(all_output, all_target, batch)}"
+            pbar.set_description(score_text)
+
+            if not args.silent:
+                print("Distance till end:", distance_till_end)
+                print("Prediction:", output[0].strip())
+                print("References:", target[0])
 
             with open(os.path.join(args.log_dir, "results.pkl"), "wb") as f:
                 pickle.dump({
