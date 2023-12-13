@@ -46,6 +46,9 @@ def parse_args():
     parser.add_argument("--deepspeed_config", type=str, default=None)
     parser.add_argument("--constant_answer", type=str, default="")
     parser.add_argument("--top_k_attention", type=int, default=None)
+    parser.add_argument("--top_k_insert_at", type=int, default=2048)
+    parser.add_argument("--top_k_from_layer", type=int, default=4)
+    parser.add_argument("--top_k_to_layer", type=int, default=1000)
 
     args = parser.parse_args()
 

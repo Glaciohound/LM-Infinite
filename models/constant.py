@@ -17,7 +17,8 @@ class ConstantModel(Model_Base):
         self.constant_answer = constant_answer
         self.tokenizer = ConstantTokenizer()
 
-    def generate(self, input_ids, attention_mask, max_generation_length,
+    def generate(self, input_ids, attention_mask,
+                 max_generation_length, min_new_tokens,
                  suppress_tokens, do_sample):
         return [self.constant_answer], torch.ones(1, 20)
 

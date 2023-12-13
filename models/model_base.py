@@ -70,7 +70,7 @@ class Model_Base(nn.Module):
 
     def generate(self, input_ids, attention_mask,
                  max_generation_length, min_new_tokens,
-                 suppress_tokens, do_sample):
+                 suppress_tokens, do_sample, stopping_criteria):
         output_ids = self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -78,6 +78,7 @@ class Model_Base(nn.Module):
             max_new_tokens=max_generation_length,
             min_new_tokens=min_new_tokens,
             suppress_tokens=suppress_tokens,
+            stopping_criteria=stopping_criteria,
         )
         decoded = [
             self.tokenizer.decode(_o[_a.sum():], skip_special_tokens=True)

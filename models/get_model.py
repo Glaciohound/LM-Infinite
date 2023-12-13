@@ -10,7 +10,7 @@ def get_model(
     use_lambda_attention,
     local_branch, global_branch,
     limit_distance, triangle_offset, constant_answer,
-    top_k_attention
+    top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
 ):
     hack_args = (use_lambda_attention, local_branch, global_branch,
                  limit_distance, triangle_offset)
@@ -29,7 +29,7 @@ def get_model(
         model = LLAMA_Model(
             model_name_or_path, tokenizer_path, max_length, truncation_side,
             load_in_4bit, device_map, *hack_args,
-            top_k_attention
+            top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
         )
     elif model_name_or_path.startswith("mosaicml/mpt-7b"):
         model = MPT_7B_Model(

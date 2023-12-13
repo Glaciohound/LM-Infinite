@@ -1,7 +1,6 @@
 import json
 from tqdm import tqdm
 
-
 system_prompt = "<s>[INST] <<SYS>> \n " \
     "You are a helpful, concise and honest assistant. <</SYS>> \n "
 concise_prompt = "Do not provide any explanation. [/INST] \n"
@@ -44,7 +43,6 @@ def get_passkey_retrieval(dataset_dir, dataset_group, structured_prompt,
             " What is the pass key? The pass key is "
         if structured_prompt:
             _datum["prompt"] = system_prompt + _datum["input"] + concise_prompt
-        _datum["output"] = _datum["target"]
         _datum["id"] = _id
     return {
         "data": dataset,
@@ -66,6 +64,19 @@ def get_data(dataset_name, dataset_dir, dataset_group,
         dataset = get_passkey_retrieval(
             dataset_dir, dataset_group, structured_prompt,
             max_data_num, start_data_from)
+    elif dataset_name == "tau/zero_scrolls":
+        from .zero_scrolls.get_zero_scrolls import get_zero_scrolls
+        dataset = get_zero_scrolls(
+            dataset_group, split,
+            max_data_num, start_data_from)
+    elif dataset_name.startswith("qasper"):
+        from .qasper import get_qasper
+        dataset = get_qasper(
+            dataset_name, split, max_data_num, start_data_from)
+    elif dataset_name.startswith("narrative_qa"):
+        from .narrative_qa import get_narrative_qa
+        dataset = get_narrative_qa(
+            dataset_name, split, max_data_num, start_data_from)
     else:
         raise NotImplementedError()
 
