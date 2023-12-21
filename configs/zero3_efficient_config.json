@@ -1,10 +1,8 @@
 {
     "fp16": {
-        "enabled": true
-    },
-
-    "bp16": {
-        "enabled": true
+        "enabled": true,
+        "initial_scale_power": 12,
+        "min_loss_scale": 1
     },
 
     "zero_optimization": {
@@ -29,10 +27,25 @@
         "stage3_gather_16bit_weights_on_model_save": true
     },
 
-    "gradient_accumulation_steps": 1,
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": 2e-5,
+            "betas": [
+                0.9,
+                0.95
+            ],
+            "eps": 1e-5,
+            "weight_decay": 0
+        }
+    },
+
+    "gradient_accumulation_steps": 4,
     "gradient_clipping": true,
-    "steps_per_print": 2000,
-    "train_batch_size": 1,
+    "steps_per_print": 25,
+    "train_batch_size": 4,
     "train_micro_batch_size_per_gpu": 1,
-    "wall_clock_breakdown": false
+    "wall_clock_breakdown": false,
+    "zero_quantized_weights": true,
+    "zero_quantized_gradients": true
 }

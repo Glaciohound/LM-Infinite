@@ -113,6 +113,7 @@ def main(args):
     # evaluate
     print("starts evaluating...")
     pbar = tqdm(data["data"])
+    start_data_from = args.start_data_from or 0
     for datum_i, datum in enumerate(pbar):
         if datum_i in all_datum_ids:
             continue
@@ -138,7 +139,7 @@ def main(args):
         all_output.append(remove_tag(output[0].strip()))
         all_target.append(target)
         all_ids.append(datum["id"])
-        all_datum_ids.append(datum_i)
+        all_datum_ids.append(datum_i + start_data_from)
 
         if not args.silent and args.dataset == "passkey_retrieval":
             answer_prefix = datum["prompt"][

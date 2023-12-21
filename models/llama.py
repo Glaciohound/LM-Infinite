@@ -141,6 +141,19 @@ def attn_forward_factory(
 
         past_key_value = (key_states, value_states, key_position_ids) if use_cache else None
 
+        if kv_seq_len > local_branch + global_branch and use_lambda_mask:
+            past_key_value = (
+                torch.cat([
+                    key_states[..., :global_branch, :],
+                    key_states[..., -local_branch:, :],
+                ], dim=-2),
+                torch.cat([
+                    value_states[..., :global_branch, :],
+                    value_states[..., -local_branch:, :],
+                ], dim=-2),
+                key_position_ids[..., :local_branch + global_branch]
+            ) if use_cache else None
+
         # inv_freq controls the dtype of rotation phase, which can be large
         self.rotary_emb.inv_freq = self.rotary_emb.inv_freq.to(torch.float32)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
@@ -329,6 +342,10 @@ class LLAMA_Model(Model_Base):
                 top_k_from_layer, top_k_to_layer,
                 layer_i
             )
+
+        if use_lambda_mask:
+            self.model.model._prepare_decoder_attention_mask = \
+                lambda *args, **kwargs: None
 
     def to(self, device):
         if self.load_in_4bit:

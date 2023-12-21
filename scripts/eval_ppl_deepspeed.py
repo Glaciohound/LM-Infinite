@@ -35,7 +35,9 @@ def main(args):
         args.fp16, args.load_in_4bit, args.device_map,
         args.use_lambda_attention,
         args.local_branch, args.global_branch,
-        args.limit_distance, args.triangle_offset, args.constant_answer)
+        args.limit_distance, args.triangle_offset, args.constant_answer,
+        args.top_k_attention, args.top_k_insert_at,
+        args.top_k_from_layer, args.top_k_to_layer)
     dataloader = DataLoader(data, batch_size=args.batch_size, shuffle=False,
                             collate_fn=model.tokenize)
 
@@ -95,6 +97,9 @@ def main(args):
                 "nll_stats_sequence": nll_stats_sequence,
                 "nll_stats_token": nll_stats_token,
             }, f)
+
+    nll_mean = np.array([np.nanmean(_nll) for _nll in all_nll])
+    print("nll_mean: ", nll_mean.mean())
 
 
 if __name__ == "__main__":

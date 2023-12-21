@@ -47,13 +47,16 @@ class Model_Base(nn.Module):
         return input_ids, attention_mask
 
     def forward_features(self, input_ids, attention_mask,
-                         output_attentions, output_hidden_states):
+                         output_attentions=False, output_hidden_states=False,
+                         use_cache=False, past_key_values=None):
         output = self.model(input_ids=input_ids,
-                            use_cache=False,
+                            use_cache=use_cache,
                             attention_mask=attention_mask,
                             return_dict=True,
                             output_attentions=output_attentions,
-                            output_hidden_states=output_hidden_states,)
+                            output_hidden_states=output_hidden_states,
+                            past_key_values=past_key_values
+                            )
         logits = output["logits"]
         batch_size, length, _ = logits.shape
         token_nll = F.cross_entropy(
@@ -67,6 +70,11 @@ class Model_Base(nn.Module):
         ]
         output["token_nll_list"] = token_nll_list
         return output
+
+    def forward(self, *args, **kwargs):
+        return self.forward_features(
+            *args, **kwargs
+        )
 
     def generate(self, input_ids, attention_mask,
                  max_generation_length, min_new_tokens,

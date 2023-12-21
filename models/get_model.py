@@ -21,11 +21,11 @@ def get_model(
         )
     elif model_name_or_path == "decapoda-research/llama-7b-hf":
         model = LLAMA_Model(
-            model_name_or_path, model_name_or_path,
-            max_length, truncation_side,
-            load_in_4bit, device_map, *hack_args
+            model_name_or_path, model_name_or_path, max_length, truncation_side,
+            load_in_4bit, device_map, *hack_args,
+            top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
         )
-    elif "llama-2" in model_name_or_path:
+    elif "llama-2" in model_name_or_path or "llama2" in model_name_or_path:
         model = LLAMA_Model(
             model_name_or_path, tokenizer_path, max_length, truncation_side,
             load_in_4bit, device_map, *hack_args,

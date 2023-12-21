@@ -45,9 +45,12 @@ class Lambda_Attention_Matrix:
         device = key_rot.device
         min_value = torch.finfo(dtype).min
 
-        if query_length < key_length:
-            assert query_rot.shape[0] == 1
+        # from IPython import embed; embed(); exit()
+        if query_length == 1:
             self.mode = "single_query"
+        elif query_length < key_length:
+            assert query_length + local_branch + global_branch == key_length
+            self.mode = "cached"
         elif query_length <= local_branch:
             self.mode = "short_seq"
         else:
@@ -86,7 +89,7 @@ class Lambda_Attention_Matrix:
             )
             self.attn = torch.cat((
                 attn_stationary, attn_rot), -1)
-        else:
+        elif self.mode == "long_seq":
             pad_to_length = ((query_length-1) // local_branch + 1
                              ) * local_branch
             patch_size = pad_to_length - query_length
@@ -115,6 +118,38 @@ class Lambda_Attention_Matrix:
             self.pad_to_length = pad_to_length
             self.attn = torch.cat((
                 attn_stationary, attn_rot), -1)
+        elif self.mode == "cached":
+            pad_to_length = ((query_length-1) // local_branch + 1
+                             ) * local_branch
+            patch_size = pad_to_length - query_length
+            segmented_query_rot = blockwise_sequence(query_rot, local_branch)
+            segmented_key_rot = blockwise_sequence(
+                key_rot[..., global_branch:, :], local_branch)
+            segmented_key_rot = shift_and_pair(segmented_key_rot)[
+                ..., 1:, :, :]
+            attn_rot = torch.matmul(
+                segmented_query_rot, segmented_key_rot.transpose(-1, -2)
+            )
+            attn_rot = torch.where(
+                torch.ones(
+                    (local_branch, 2*local_branch), dtype=torch.bool
+                ).to(device).triu(1).tril(local_branch).logical_not(),
+                min_value, attn_rot
+            )
+            if patch_size != 0:
+                attn_rot[..., -1, -patch_size:, :] = min_value
+                attn_rot[..., -1, :, -patch_size:] = min_value
+            attn_rot = attn_rot.view(
+                query_rot.shape[:-2] + (-1, local_branch*2)
+            )
+            attn_stationary = pad_sequence_to_length(
+                attn_stationary, pad_to_length, min_value
+            )
+            self.pad_to_length = pad_to_length
+            self.attn = torch.cat((
+                attn_stationary, attn_rot), -1)
+        else:
+            raise NotImplementedError()
 
         self.query_length = query_length
         self.key_length = key_length
@@ -154,6 +189,7 @@ class Lambda_Attention_Matrix:
         return self
 
     def matmul(self, value):
+        # from IPython import embed; embed(); exit()
         if self.mode == "short_seq":
             output = torch.matmul(self.attn, value)
         elif self.mode == "single_query":
@@ -164,7 +200,7 @@ class Lambda_Attention_Matrix:
                     value[..., max(0, self.key_length-self.local_branch):, :]
                 ), -2)
             )
-        else:
+        elif self.mode == "long_seq":
             segmented_value = shift_and_pair(blockwise_sequence(
                 value, self.local_branch))
             output_stationary = torch.matmul(
@@ -181,6 +217,28 @@ class Lambda_Attention_Matrix:
                 self.attn.shape[:-2] + (self.pad_to_length, -1)
             )
             output = output_stationary + output_rot[..., :self.query_length, :]
+        elif self.mode == "cached":
+            segmented_value = blockwise_sequence(
+                value[..., self.global_branch:, :],
+                self.local_branch)
+            segmented_value = shift_and_pair(segmented_value)[
+                ..., 1:, :, :]
+            output_stationary = torch.matmul(
+                self.attn[..., :self.query_length, :self.global_branch],
+                value[..., :self.global_branch, :]
+            )
+            output_rot = torch.matmul(
+                self.attn[..., self.global_branch:].view(
+                    self.attn.shape[:-2] +
+                    (-1, self.local_branch, self.local_branch*2)
+                ),
+                segmented_value
+            ).view(
+                self.attn.shape[:-2] + (self.pad_to_length, -1)
+            )
+            output = output_stationary + output_rot[..., :self.query_length, :]
+        else:
+            raise NotImplementedError()
         del self.attn
         return output
 

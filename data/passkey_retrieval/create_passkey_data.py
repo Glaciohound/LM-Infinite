@@ -95,7 +95,7 @@ if __name__ == "__main__":
     task_creator = CreatePassKeyTask(tokenizer)
 
     samples = task_creator.create_task_retrieve(
-        args.token_length, first_half=args.first_half)
+        args.token_length, args.num_samples, first_half=args.first_half)
 
     print(f"Length of the dataset: {len(samples)}")
 
