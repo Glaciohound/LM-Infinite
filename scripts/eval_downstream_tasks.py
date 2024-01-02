@@ -69,7 +69,7 @@ def main(args):
             input_ids = input_ids.to(device)
             attention_mask = attention_mask.to(device)
             output, output_ids = model.generate(
-                input_ids, attention_mask, max_generation_length,
+                input_ids, attention_mask, max_generation_length, args.min_new_tokens,
                 args.suppress_tokens, args.do_sample)
             # print(model.tokenizer.convert_ids_to_tokens(
             #     output_ids[0, input_ids.shape[1]:]))
