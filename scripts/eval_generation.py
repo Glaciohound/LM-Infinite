@@ -36,7 +36,9 @@ def main(args):
         args.fp16, args.load_in_4bit, args.device_map,
         args.use_lambda_attention,
         args.local_branch, args.global_branch,
-        args.limit_distance, args.triangle_offset, args.constant_answer)
+        args.limit_distance, args.triangle_offset, args.constant_answer,
+        args.top_k_attention, args.top_k_insert_at,
+        args.top_k_from_layer, args.top_k_to_layer)
     dataloader = DataLoader(data, batch_size=args.batch_size, shuffle=False)
 
     if args.model != "constant_model":
@@ -75,6 +77,7 @@ def main(args):
                     args.max_generation_length,
                     args.min_new_tokens,
                     args.suppress_tokens, args.do_sample,
+                    []
                 )
                 generation = generation[0]
                 generation_results[position] = {

@@ -219,6 +219,27 @@ argument set.
 If you want only to evaluate on a subset of the test set, you can use the `--start_data_from` argument to specify the starting index of the test set, and/or `--max_data_num` to specify the number of examples after that index.
 
 
+### Evaluating Perplexity at Extreme Lengths
+
+
+```
+
+TRIAL=llama2-infinite-ArXiv-extreme
+CUDA_VISIBLE_DEVICES=0
+MASTER_PORT=$(shuf -i 29500-65535 -n 1)
+echo port: $MASTER_PORT
+mkdir -p $LOG_DIR/$TRIAL
+PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_infinite_ppl.py \
+    --deepspeed_config configs/zero3_efficient_config.json \
+    --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
+    --use_lambda_attention --local_branch 4096 --global_branch 10 --limit_distance 4096 \
+    --dataset the_pile --dataset_group ArXiv --split test --dataset_dir ${PILE_PATH} \
+    --streaming_length 200000000 --max_length 128000 --start_data_from 2300 \
+    --log_dir $LOG_DIR/$TRIAL
+
+```
+
+
 ### Generation
 
 
@@ -242,48 +263,74 @@ PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $
 ```
 
 
-### Evaluation on Passkey Retrieval Task
+### Evaluation Downstream Tasks
 
+#### Passkey Retrieval
 
-First create the dataset with the following command and put to `${PASSKEY_DATA}`.
-
+First, we need to prepare the passkey retrieval dataset.
 ```
-echo $PASSKEY_DATA
-mkdir -p ${PASSKEY_DATA}
 for MAX_LENGTH in 2048 3072 4096 5120 6144 7168 8192 10240 12288 14335 16384; do
     echo $MAX_LENGTH
     python data/passkey_retrieval/create_passkey_data.py \
         --token-length $MAX_LENGTH \
         --dump-file-path ${PASSKEY_DATA}/${MAX_LENGTH} \
-        --tokenizer-path ${PATH_TO_LLAMA2_CHECKPOINTS}
+        --tokenizer-path ${PATH_TO_LLAMA2_CHECKPOINTS} \
+        --num-samples 1000
 done
-```
-
-Evaluating the passkey retrieval task on ArXiv test set with Llama-2 model.
 
 ```
-MAX_LENGTH=4096
-TRIAL=llama2-infinite-passkey-$MAX_LENGTH
-mkdir -p $LOG_DIR/$TRIAL
+
+Then, let us evaluate the passkey retrieval task.
+```
+
 CUDA_VISIBLE_DEVICES=0
-MASTER_PORT=$(shuf -i 29500-65535 -n 1)
-PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_downstream_tasks.py \
-    --deepspeed_config configs/zero3_efficient_config.json \
-    --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
-    --use_lambda_attention --local_branch 4096 --global_branch 100 --limit_distance 4096 \
-    --dataset passkey_retrieval --dataset_dir ${PASSKEY_DATA} --dataset_group ${MAX_LENGTH} \
-    --max_generation_length 10 --evaluate_metrics \
-    --log_dir $LOG_DIR/$TRIAL
+for MAX_LENGTH in 6144 8192 10240 12288 16384; do
+    TRIAL=llama2-infinite-passkey-$MAX_LENGTH
+    mkdir -p $LOG_DIR/$TRIAL
+    MASTER_PORT=$(shuf -i 29500-65535 -n 1)
+    PYTHONPATH=. deepspeed --master_port $MASTER_PORT --include localhost:$CUDA_VISIBLE_DEVICES scripts/eval_downstream_tasks.py \
+        --deepspeed_config configs/zero3_efficient_config.json \
+        --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
+        --local_branch 4096 --global_branch 10 --limit_distance 4096 --triangle_offset 0 \
+        --top_k_attention 5 --top_k_from_layer 4 \
+        --dataset passkey_retrieval --dataset_dir ${PASSKEY_DATA} --dataset_group ${MAX_LENGTH} \
+        --max_generation_length 7 --evaluate_metrics \
+        --log_dir $LOG_DIR/$TRIAL \
+        2>&1 | tee $LOG_DIR/$TRIAL/log.txt
+done
+
 ```
 
 
+#### Qasper
+
+
+Running the Qasper task:
+```
+
+CUDA_VISIBLE_DEVICES=0
+DATASET=qasper
+TRIAL=llama2-infinite-$DATASET
+mkdir -p $LOG_DIR/$TRIAL
+MASTER_PORT=$(shuf -i 29500-65535 -n 1)
+echo port: $MASTER_PORT
+PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_downstream_tasks.py \
+    --deepspeed_config configs/zero3_efficient_config_large.json \
+    --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
+    --use_lambda_attention --local_branch 4096 --global_branch 10 --limit_distance 4096 --triangle_offset 0 \
+    --top_k_attention 5 --top_k_from_layer 4 \
+    --dataset $DATASET --split test --evaluate_metrics \
+    --max_length 6144 --truncation_side center \
+    --log_dir $LOG_DIR/$TRIAL
+
+```
 
 ## Citation
 
 ```
 @article{han2023lminfinite,
-  title={LM-Infinite: Simple On-the-Fly Length Generalization for Large Language Models},
-  author={Han, Chi and Wang, Qifan and Xiong, Wenhan and Chen, Yu and Ji, Heng and Wang, Sinong},
+  title={LM-Infinite: Zero-Shot Extreme Length Generalization for Large Language Models},
+  author={Han, Chi and Wang, Qifan and Hao Peng and Xiong, Wenhan and Chen, Yu and Ji, Heng and Wang, Sinong},
   journal={arXiv preprint arXiv:2308.16137},
   year={2023}
 }

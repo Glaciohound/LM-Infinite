@@ -33,7 +33,7 @@ def attn_forward_factory(use_lambda_mask, local_branch, global_branch,
             softmax_scale = 1 / math.sqrt(d)
 
         # If use_lambda_mask, we can use an efficient implementation
-        # FIXME: not validated for generation
+        # FIXME: not verified for generation
         if use_lambda_mask:
             headwise_limit = 33000  # magic number set for A100 GPU
             k_trans = k.transpose(-2, -1)

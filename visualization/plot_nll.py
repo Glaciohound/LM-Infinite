@@ -15,7 +15,7 @@ for _filename, _label in zip(files, labels):
                 smoothed[-1] * smooth_gamma
             )
         smoothed.pop(0)
-        plt.plot(smoothed[:8000], label=_label, linewidth=1.5)
+        plt.plot(smoothed, label=_label, linewidth=1.5)
 
 plt.subplots_adjust(left=0.05, right=0.98, bottom=0.05, top=0.98)
 plt.legend()

@@ -87,6 +87,8 @@ class Model_Base(nn.Module):
             min_new_tokens=min_new_tokens,
             suppress_tokens=suppress_tokens,
             stopping_criteria=stopping_criteria,
+            # repetition_penalty=1.2,
+            # no_repeat_ngram_size=2,
         )
         decoded = [
             self.tokenizer.decode(_o[_a.sum():], skip_special_tokens=True)
