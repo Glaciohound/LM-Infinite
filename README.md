@@ -9,9 +9,9 @@
 ## Introduction
 
 This is reproduction of the paper
-[LM-Infinite: Simple On-the-Fly Length Generalization for Large Language Models](https://arxiv.org/abs/2308.16137)
+[LM-Infinite: Zero-Shot Extreme Length Generalization for Large Language Models](https://arxiv.org/abs/2308.16137)
 in PyTorch.
-The work is done by [Chi Han](https://glaciohound.github.io), Qifan Wang, Wenhan Xiong, Yu Chen, Heng Ji, Sinong Wang.
+The work is done by [Chi Han](https://glaciohound.github.io), Qifan Wang, Hao Peng, Wenhan Xiong, Yu Chen, Heng Ji, Sinong Wang.
 
 In this paper, the authors propose a simple method, called LM-Infinite, to improve the length generalization of large language models to as long as 128k tokens, without any additional training or parameter updates.
 The key idea is to use (1) a $\Lambda$-shaped attention pattern, so that each token only attends to the nearest $L_{pretrain}$ tokens as well as a few starting tokens, and (2) a distance limit $L_{pretrain}$, so that the attention distance is capped at $L_{pretrain}$.
@@ -295,8 +295,7 @@ for MAX_LENGTH in 6144 8192 10240 12288 16384; do
         --top_k_attention 5 --top_k_from_layer 4 \
         --dataset passkey_retrieval --dataset_dir ${PASSKEY_DATA} --dataset_group ${MAX_LENGTH} \
         --max_generation_length 7 --evaluate_metrics \
-        --log_dir $LOG_DIR/$TRIAL \
-        2>&1 | tee $LOG_DIR/$TRIAL/log.txt
+        --log_dir $LOG_DIR/$TRIAL
 done
 
 ```
