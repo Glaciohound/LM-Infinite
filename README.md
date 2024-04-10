@@ -72,7 +72,7 @@ My commands to install the requirements in Anaconda & Pip environment are as fol
 
 ```
 conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
-conda install -c conda-forge sentencepiece einops cudatoolkit-dev tqdm ipython datasets evaluate rouge-score protobuf accelerate
+conda install -c conda-forge sentencepiece einops cudatoolkit-dev tqdm ipython datasets evaluate rouge-score protobuf accelerate langchain openai
 pip install transformers deepspeed
 ```
 
@@ -291,7 +291,7 @@ for MAX_LENGTH in 6144 8192 10240 12288 16384; do
     PYTHONPATH=. deepspeed --master_port $MASTER_PORT --include localhost:$CUDA_VISIBLE_DEVICES scripts/eval_downstream_tasks.py \
         --deepspeed_config configs/zero3_efficient_config.json \
         --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
-        --local_branch 4096 --global_branch 10 --limit_distance 4096 --triangle_offset 0 \
+        --use_lambda_attention --local_branch 4096 --global_branch 10 --limit_distance 4096 --triangle_offset 0 \
         --top_k_attention 5 --top_k_from_layer 4 \
         --dataset passkey_retrieval --dataset_dir ${PASSKEY_DATA} --dataset_group ${MAX_LENGTH} \
         --max_generation_length 7 --evaluate_metrics \

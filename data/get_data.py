@@ -53,6 +53,35 @@ def get_passkey_retrieval(dataset_dir, dataset_group, structured_prompt,
     }
 
 
+def get_needle_in_a_haystack(
+        dataset_dir, dataset_group, structured_prompt,
+        max_data_num, start_data_from):
+    from .needle_in_a_haystack.evaluators.openai import OpenAIEvaluator
+    filename = f"{dataset_dir}/{dataset_group}-test.jsonl"
+    with open(filename, "r") as f:
+        dataset = list(map(json.loads, tqdm(f.readlines())))
+    if start_data_from is not None:
+        dataset = dataset[start_data_from:]
+    if max_data_num is not None:
+        dataset = dataset[:max_data_num]
+    for _id, _datum in enumerate(dataset):
+        _datum["prompt"] = _datum["input"] + _datum["question"]
+        if structured_prompt:
+            _datum["prompt"] = system_prompt + _datum["input"] + concise_prompt
+        _datum["id"] = _id
+    agent = OpenAIEvaluator(
+        true_answer=dataset[0]["target"],
+        question_asked=dataset[0]["question"]
+    )
+    return {
+        "data": dataset,
+        "metadata": {
+            "metric_func": agent.evaluate_batch_responses,
+            "recommended_length": None,
+        }
+    }
+
+
 def get_data(dataset_name, dataset_dir, dataset_group,
              split, structured_prompt,
              max_data_num, start_data_from):
@@ -62,6 +91,10 @@ def get_data(dataset_name, dataset_dir, dataset_group,
             max_data_num, start_data_from)
     elif dataset_name == "passkey_retrieval":
         dataset = get_passkey_retrieval(
+            dataset_dir, dataset_group, structured_prompt,
+            max_data_num, start_data_from)
+    elif dataset_name == "needle_in_a_haystack":
+        dataset = get_needle_in_a_haystack(
             dataset_dir, dataset_group, structured_prompt,
             max_data_num, start_data_from)
     elif dataset_name == "tau/zero_scrolls":

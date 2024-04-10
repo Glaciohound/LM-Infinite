@@ -18,8 +18,8 @@ def rotate_half(x):
 
 def apply_rotary_pos_emb(vec, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
-    cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
-    sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
+    cos = cos.squeeze(0)  # [seq_len, dim]
+    sin = sin.squeeze(0)  # [seq_len, dim]
     cos = cos[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
     sin = sin[position_ids].unsqueeze(1)  # [bs, 1, seq_len, dim]
 
@@ -81,8 +81,8 @@ def detailed_lambda_attention(
         if top_k_from_layer <= layer_i and top_k_to_layer > layer_i and \
                 col_high >= global_branch + top_k_attention:
             near_query_states = \
-                (query_states * cos[0, 0, top_k_insert_at]) + \
-                (rotate_half(query_states) * sin[0, 0, top_k_insert_at])
+                (query_states * cos[0, top_k_insert_at]) + \
+                (rotate_half(query_states) * sin[0, top_k_insert_at])
             near_attention = near_query_states[..., line_i, None, :].matmul(
                 stationary_key_states.transpose(-1, -2)
             ) / math.sqrt(head_dim)
@@ -118,6 +118,7 @@ def attn_forward_factory(
         output_attentions: bool = False,
         use_cache: bool = False,
         padding_mask: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -126,37 +127,21 @@ def attn_forward_factory(
         value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         dtype = query_states.dtype
         device = query_states.device
-        kv_seq_len = key_states.shape[-2]
 
-        # New: here we change the code to store the un-rotated key and value
-        # states, as they are useful for stationary attention.
+        past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-            key_position_ids = torch.cat([past_key_value[2], position_ids], dim=1)
-            kv_seq_len += past_key_value[0].shape[-2]
-        else:
-            key_position_ids = position_ids
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            # cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = dict()
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        past_key_value = (key_states, value_states, key_position_ids) if use_cache else None
-
-        if kv_seq_len > local_branch + global_branch and use_lambda_mask:
-            past_key_value = (
-                torch.cat([
-                    key_states[..., :global_branch, :],
-                    key_states[..., -local_branch:, :],
-                ], dim=-2),
-                torch.cat([
-                    value_states[..., :global_branch, :],
-                    value_states[..., -local_branch:, :],
-                ], dim=-2),
-                key_position_ids[..., :local_branch + global_branch]
-            ) if use_cache else None
+        kv_seq_len = key_states.shape[-2]
+        key_position_ids = torch.arange(kv_seq_len, device=device)[None]
 
         # inv_freq controls the dtype of rotation phase, which can be large
         self.rotary_emb.inv_freq = self.rotary_emb.inv_freq.to(torch.float32)
-        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        cos, sin = self.rotary_emb(value_states, key_position_ids)
         rot_query_states = apply_rotary_pos_emb(
             query_states, cos, sin, position_ids)
         rot_key_states = apply_rotary_pos_emb(
@@ -169,35 +154,34 @@ def attn_forward_factory(
             stationary_key_states = key_states
             effective_limit_distance = min(limit_distance, kv_seq_len-1)
             stationary_query_states = \
-                (query_states * cos[0, 0, effective_limit_distance]) + \
-                (rotate_half(query_states) * sin[0, 0, effective_limit_distance])
+                (query_states * cos[0, effective_limit_distance]) + \
+                (rotate_half(query_states) * sin[0, effective_limit_distance])
 
+        headwise_limit = 33000  # magic number set for A100 GPU
         # If use_lambda_mask, we can use an efficient implementation
-        if use_lambda_mask and top_k_attention is not None and q_len > local_branch:
-            if q_len > 1:
-                headwise_limit = 33000  # magic number set for A100 GPU
-                if q_len > headwise_limit:
-                    for head_i in range(self.num_heads):
-                        query_states[:, head_i, :-1] = (
-                            lambda_matmul(
-                                rot_key_states[:, head_i],
-                                stationary_key_states[:, head_i],
-                                rot_query_states[:, head_i],
-                                stationary_query_states[:, head_i],
-                                local_branch, global_branch
-                            ) / math.sqrt(self.head_dim)
-                        ).softmax().matmul(value_states[:, head_i])[
-                            :, :-1]
-                else:
-                    query_states[:, :, :-1] = (
+        if use_lambda_mask and top_k_attention is not None:
+            if q_len > headwise_limit:
+                for head_i in range(self.num_heads):
+                    query_states[:, head_i, :-1] = (
                         lambda_matmul(
-                            rot_key_states,
-                            stationary_key_states,
-                            rot_query_states,
-                            stationary_query_states,
+                            rot_key_states[:, head_i],
+                            stationary_key_states[:, head_i],
+                            rot_query_states[:, head_i],
+                            stationary_query_states[:, head_i],
                             local_branch, global_branch
                         ) / math.sqrt(self.head_dim)
-                     ).softmax().matmul(value_states)[:, :, :-1]
+                    ).softmax().matmul(value_states[:, head_i])[
+                        :, :-1]
+            else:
+                query_states[:, :, :-1] = (
+                    lambda_matmul(
+                        rot_key_states,
+                        stationary_key_states,
+                        rot_query_states,
+                        stationary_query_states,
+                        local_branch, global_branch
+                    ) / math.sqrt(self.head_dim)
+                 ).softmax().matmul(value_states)[:, :, :-1]
 
             query_states[:, :, -1] = detailed_lambda_attention(
                 query_states[:, :, -1, None], key_states, value_states,
@@ -214,7 +198,6 @@ def attn_forward_factory(
             ).squeeze(2)
 
         elif use_lambda_mask:
-            headwise_limit = 33000  # magic number set for A100 GPU
             if q_len > headwise_limit:
                 for head_i in range(self.num_heads):
                     query_states[:, head_i] = (
@@ -360,6 +343,7 @@ def convert_llama_model(model, local_branch, global_branch):
     for layer_i, hidden_layer in enumerate(model.model.layers):
         attn = hidden_layer.self_attn
         attn.forward = attn_forward_factory(
-            attn, True, local_branch, global_branch, local_branch, 0
+            attn, True, local_branch, global_branch, local_branch, 0,
+            None, None, None, None, layer_i
         )
     return model

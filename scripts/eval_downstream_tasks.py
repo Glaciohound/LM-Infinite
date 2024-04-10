@@ -38,7 +38,7 @@ def save_results(split, all_target, all_output, all_ids, all_datum_id, scores):
 def load_results(split):
     cache_file = os.path.join(args.log_dir, f"results_{split}.pkl")
     if os.path.exists(cache_file):
-        print("Loading results from cache...")
+        print("Loading results from cache:", cache_file)
         with open(cache_file, "rb") as f:
             results = pickle.load(f)
         return results["all_target"], results["all_output"], \
@@ -79,7 +79,7 @@ def main(args):
     data = get_data(args.dataset, args.dataset_dir,
                     args.dataset_group, args.split, args.structured_prompt,
                     args.max_data_num, args.start_data_from)
-    # load results
+    # load existing evaluation results
     all_target, all_output, all_ids, all_datum_ids, scores = load_results(
         args.split
     )
