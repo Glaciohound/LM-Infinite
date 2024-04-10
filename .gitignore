@@ -166,5 +166,6 @@ _legacy/
 test*
 data/longbench/
 data/zero_scrolls/
+data/needle_in_a_haystack/
 today.md
 yesterday.md
