@@ -72,7 +72,7 @@ My commands to install the requirements in Anaconda & Pip environment are as fol
 
 ```
 conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
-conda install -c conda-forge sentencepiece einops cudatoolkit-dev tqdm ipython datasets evaluate rouge-score protobuf accelerate langchain openai
+conda install -c conda-forge sentencepiece einops tqdm ipython datasets evaluate rouge-score protobuf accelerate langchain openai
 pip install transformers deepspeed
 ```
 

@@ -35,7 +35,7 @@ def main(args):
         args.fp16, args.load_in_4bit, args.device_map,
         args.use_lambda_attention,
         args.local_branch, args.global_branch,
-        args.limit_distance, args.triangle_offset, args.constant_answer)
+        args.limit_distance, args.constant_answer)
     dataloader = DataLoader(data, batch_size=args.batch_size, shuffle=False,
                             collate_fn=model.tokenize)
 

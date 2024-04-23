@@ -13,7 +13,7 @@ from .lambda_attention import lambda_matmul
 # for original implementation
 def attn_forward_factory(
     self, use_lambda_mask, local_branch, global_branch,
-    limit_distance, triangle_offset
+    limit_distance,
 ):
     def _attn(
         query_rot,
@@ -203,7 +203,7 @@ class GPT_J_Model(Model_Base):
     def __init__(
         self, model_name_or_path, max_length, fp16, truncation_side,
         use_lambda_mask, local_branch, global_branch,
-        limit_distance, triangle_offset
+        limit_distance,
     ):
         super().__init__(max_length, truncation_side)
         if fp16:
@@ -228,7 +228,6 @@ class GPT_J_Model(Model_Base):
         self.local_branch = local_branch
         self.global_branch = global_branch
         self.limit_distance = limit_distance
-        self.triangle_offset = triangle_offset
 
         for hidden_layer in self.model.transformer.h:
             attn = hidden_layer.attn
@@ -251,7 +250,7 @@ class GPT_J_Model(Model_Base):
 
             attn.forward = attn_forward_factory(
                 attn, use_lambda_mask, local_branch, global_branch,
-                limit_distance, triangle_offset
+                limit_distance,
             )
 
 

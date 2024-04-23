@@ -9,11 +9,11 @@ def get_model(
     fp16, load_in_4bit, device_map,
     use_lambda_attention,
     local_branch, global_branch,
-    limit_distance, triangle_offset, constant_answer,
+    limit_distance, constant_answer,
     top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
 ):
     hack_args = (use_lambda_attention, local_branch, global_branch,
-                 limit_distance, triangle_offset)
+                 limit_distance)
     if model_name_or_path == "EleutherAI/gpt-j-6b":
         model = GPT_J_Model(
             model_name_or_path, max_length, fp16, truncation_side,

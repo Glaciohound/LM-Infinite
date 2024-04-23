@@ -34,7 +34,7 @@ def detailed_lambda_attention(
     cos, sin,
     attention_mask, head_dim, device, dtype,
     q_len, kv_seq_len,
-    global_branch, local_branch, limit_distance, triangle_offset,
+    global_branch, local_branch, limit_distance,
     top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer, layer_i
 ):
     attn_weights = rot_query_states.matmul(
@@ -45,20 +45,11 @@ def detailed_lambda_attention(
     ) / math.sqrt(head_dim)
 
     if limit_distance is not None:
-        attn_weights = attn_weights.triu(-local_branch+1+kv_seq_len-q_len)
+        attn_weights = attn_weights.triu(-limit_distance+1+kv_seq_len-q_len)
         # lower-triangular limited distance zone
         attn_weights += attn_stationary.tril(
             -limit_distance+kv_seq_len-q_len
         )
-
-    # triangular mask zone
-    if triangle_offset != 0:
-        for line_i in range(max(0, global_branch + local_branch -
-                                kv_seq_len + q_len),
-                            q_len):
-            col_high = line_i - local_branch + 1 + kv_seq_len - q_len
-            attn_weights[:, line_i, global_branch: col_high] -= \
-                math.log(col_high - global_branch) * triangle_offset
 
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask[:, 0]
@@ -71,7 +62,7 @@ def detailed_lambda_attention(
     if top_k_attention is not None:
         lambda_mask = torch.ones_like(attn_weights).to(bool)
         lambda_mask = lambda_mask.tril(
-            -limit_distance+kv_seq_len-q_len)
+            -local_branch+kv_seq_len-q_len)
         lambda_mask[..., :global_branch] = False
         attn_weights.masked_fill_(
             lambda_mask, torch.finfo(attn_weights.dtype).min)
@@ -106,7 +97,7 @@ def detailed_lambda_attention(
 # Efficient implementation using `models/lambda_attention.py`
 def attn_forward_factory(
     self, use_lambda_mask, local_branch, global_branch,
-    limit_distance, triangle_offset,
+    limit_distance,
     top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer, layer_i
 ):
 
@@ -192,7 +183,7 @@ def attn_forward_factory(
                 self.head_dim, device, dtype,
                 1, kv_seq_len,
                 global_branch, local_branch,
-                limit_distance, triangle_offset,
+                limit_distance,
                 top_k_attention, top_k_insert_at,
                 top_k_from_layer, top_k_to_layer, layer_i
             ).squeeze(2)
@@ -232,37 +223,10 @@ def attn_forward_factory(
                     cos, sin, attention_mask, self.head_dim, device, dtype,
                     q_len, kv_seq_len,
                     global_branch, local_branch,
-                    limit_distance, triangle_offset,
+                    limit_distance,
                     top_k_attention, top_k_insert_at,
                     top_k_from_layer, top_k_to_layer, layer_i
                 )
-
-            # legacy codes used for extracting attention weights
-            # 1. last token attention
-            # with open('attn_weights.txt', 'a') as f:
-            #     f.write(str(attn_weights[0, -1].cpu().numpy().tolist()) + '\n')
-            #     print(attn_weights[0, -1].reshape(-1, 1024).mean(-1))
-            # 2. entropy in overall attention
-            # import pickle
-            # attn_weights = attn_weights[0]
-            # p = attn_weights.exp()
-            # p = p / p.sum(-1, keepdim=True)
-            # entropy = (-p * p.log()).tril().sum(-1)
-            # with open('attn_weights.pkl', 'wb') as f:
-            #     pickle.dump(entropy.cpu().numpy(), f)
-            # exit()
-            # 3. implicit position information
-            # if print_or_not:
-            #     import pickle
-            #     import os
-            #     if os.path.exists('features.pkl'):
-            #         with open('features.pkl', 'rb') as f:
-            #             features = pickle.load(f)
-            #     else:
-            #         features = []
-            #     features.append(query_states[0, 0].cpu().numpy())
-            #     with open('features.pkl', 'wb') as f:
-            #         pickle.dump(features, f)
 
         attn_output = query_states
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -291,7 +255,7 @@ class LLAMA_Model(Model_Base):
         self, model_name_or_path, tokenizer_path, max_length, truncation_side,
         load_in_4bit, device_map,
         use_lambda_mask, local_branch, global_branch,
-        limit_distance, triangle_offset,
+        limit_distance,
         top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer
     ):
         super().__init__(max_length, truncation_side)
@@ -310,7 +274,6 @@ class LLAMA_Model(Model_Base):
         self.local_branch = local_branch
         self.global_branch = global_branch
         self.limit_distance = limit_distance
-        self.triangle_offset = triangle_offset
         self.top_k_attention = top_k_attention
         self.top_k_insert_at = top_k_insert_at
         self.top_k_from_layer = top_k_from_layer
@@ -320,7 +283,7 @@ class LLAMA_Model(Model_Base):
             attn = hidden_layer.self_attn
             attn.forward = attn_forward_factory(
                 attn, use_lambda_mask, local_branch, global_branch,
-                limit_distance, triangle_offset,
+                limit_distance,
                 top_k_attention, top_k_insert_at,
                 top_k_from_layer, top_k_to_layer,
                 layer_i

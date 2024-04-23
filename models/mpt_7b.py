@@ -10,7 +10,7 @@ from .lambda_attention import lambda_matmul
 
 
 def attn_forward_factory(use_lambda_mask, local_branch, global_branch,
-                         limit_distance, triangle_offset):
+                         limit_distance):
 
     def scaled_multihead_dot_product_attention(
             query, key, value, n_heads, past_key_value=None,
@@ -166,7 +166,7 @@ class MPT_7B_Model(Model_Base):
     def __init__(self, model_name_or_path, max_length, truncation_side,
                  use_lambda_mask,
                  local_branch, global_branch,
-                 limit_distance, triangle_offset):
+                 limit_distance):
         super().__init__(max_length, truncation_side)
         self.config = AutoConfig.from_pretrained(model_name_or_path,
                                                  trust_remote_code=True)
@@ -180,7 +180,6 @@ class MPT_7B_Model(Model_Base):
         self.local_branch = local_branch
         self.global_branch = global_branch
         self.limit_distance = limit_distance
-        self.triangle_offset = triangle_offset
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/gpt-neox-20b")
@@ -191,7 +190,7 @@ class MPT_7B_Model(Model_Base):
             attn = hidden_layer.attn
             attn.attn_fn = attn_forward_factory(
                 use_lambda_mask, local_branch, global_branch,
-                limit_distance, triangle_offset
+                limit_distance
             )
 
 

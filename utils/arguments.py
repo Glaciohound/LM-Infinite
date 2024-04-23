@@ -54,11 +54,9 @@ def parse_args():
 
     # lambda attention arguments
     parser.add_argument("--use_lambda_attention", action="store_true")
-    # parser.add_argument("--efficient_implementation", action="store_true")
     parser.add_argument("--local_branch", type=int, default=2048)
     parser.add_argument("--global_branch", type=int, default=100)
     parser.add_argument("--limit_distance", type=int, default=None)
-    parser.add_argument("--triangle_offset", type=float, default=0.0)
     parser.add_argument("--deepspeed_config", type=str, default=None)
     parser.add_argument("--constant_answer", type=str, default="")
     parser.add_argument("--top_k_attention", type=int, default=None)
