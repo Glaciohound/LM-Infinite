@@ -11,6 +11,7 @@ def get_model(
     local_branch, global_branch,
     limit_distance, constant_answer,
     top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
+    shuffle_policy
 ):
     hack_args = (use_lambda_attention, local_branch, global_branch,
                  limit_distance)
@@ -21,15 +22,18 @@ def get_model(
         )
     elif model_name_or_path == "decapoda-research/llama-7b-hf":
         model = LLAMA_Model(
-            model_name_or_path, model_name_or_path, max_length, truncation_side,
+            model_name_or_path, model_name_or_path,
+            max_length, truncation_side,
             load_in_4bit, device_map, *hack_args,
             top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
+            shuffle_policy
         )
     elif "llama-2" in model_name_or_path or "llama2" in model_name_or_path:
         model = LLAMA_Model(
             model_name_or_path, tokenizer_path, max_length, truncation_side,
             load_in_4bit, device_map, *hack_args,
             top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
+            shuffle_policy
         )
     elif model_name_or_path.startswith("mosaicml/mpt-7b"):
         model = MPT_7B_Model(

@@ -63,8 +63,12 @@ def parse_args():
     parser.add_argument("--top_k_insert_at", type=int, default=2048)
     parser.add_argument("--top_k_from_layer", type=int, default=4)
     parser.add_argument("--top_k_to_layer", type=int, default=1000)
+    parser.add_argument("--header", type=int, default=0)
+    parser.add_argument("--shuffle_policy", type=str, default=None)
 
     args = parser.parse_args()
+    args.shuffle_policy = args.shuffle_policy.split(",") \
+        if args.shuffle_policy else []
 
     set_seed(args.seed)
     return args

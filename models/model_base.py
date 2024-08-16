@@ -78,7 +78,20 @@ class Model_Base(nn.Module):
 
     def generate(self, input_ids, attention_mask,
                  max_generation_length, min_new_tokens,
-                 suppress_tokens, do_sample, stopping_criteria):
+                 suppress_tokens, do_sample, stopping_criteria, header):
+
+        # adding header tokens
+        input_ids = torch.cat([
+            input_ids[:, :1],
+            input_ids[:, 1:1+header],
+            input_ids[:, 1:],
+        ], dim=1)
+        attention_mask = torch.cat([
+            attention_mask[:, :1],
+            attention_mask[:, 1:1+header],
+            attention_mask[:, 1:],
+        ], dim=1)
+
         output_ids = self.model.generate(
             input_ids=input_ids,
             attention_mask=attention_mask,

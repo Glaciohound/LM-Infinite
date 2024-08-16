@@ -99,7 +99,7 @@ def main(args):
         args.local_branch, args.global_branch,
         args.limit_distance, args.constant_answer,
         args.top_k_attention, args.top_k_insert_at,
-        args.top_k_from_layer, args.top_k_to_layer,
+        args.top_k_from_layer, args.top_k_to_layer, args.shuffle_policy
     )
     if args.model != "constant_model":
         HfDeepSpeedConfig(args.deepspeed_config)
@@ -130,7 +130,8 @@ def main(args):
                 max_generation_length,
                 args.min_new_tokens,
                 args.suppress_tokens, args.do_sample,
-                [StoppingWords(model.tokenizer)]
+                [StoppingWords(model.tokenizer)],
+                args.header,
             )
 
         if not args.silent:

@@ -1,4 +1,5 @@
 import json
+import re
 from tqdm import tqdm
 
 system_prompt = "<s>[INST] <<SYS>> \n " \
@@ -64,10 +65,13 @@ def get_needle_in_a_haystack(
         dataset = dataset[start_data_from:]
     if max_data_num is not None:
         dataset = dataset[:max_data_num]
+
     for _id, _datum in enumerate(dataset):
         _datum["prompt"] = _datum["input"] + _datum["question"]
+        # _datum["prompt"] = re.sub(r"\n(?!\n)", " ", _datum["prompt"])
         if structured_prompt:
-            _datum["prompt"] = system_prompt + _datum["input"] + concise_prompt
+            _datum["prompt"] = \
+                system_prompt + _datum["prompt"] + concise_prompt
         _datum["id"] = _id
     agent = OpenAIEvaluator(
         true_answer=dataset[0]["target"],

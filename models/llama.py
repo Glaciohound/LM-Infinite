@@ -35,10 +35,17 @@ def detailed_lambda_attention(
     attention_mask, head_dim, device, dtype,
     q_len, kv_seq_len,
     global_branch, local_branch, limit_distance,
-    top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer, layer_i
+    top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
+    shuffle_policy, layer_i
 ):
+    # key/value_states.shape == [bs, heads, kv_seq_len, head_dim]
+    # query_states.shape == [bs, heads, q_len, head_dim]
+    # cos/sin.shape == [1, kv_seq_len, head_dim]
     attn_weights = rot_query_states.matmul(
         rot_key_states.transpose(-1, -2)) / math.sqrt(head_dim)
+    # attn_weights.shape == [bs, heads, q_len, kv_seq_len]
+    dtype = attn_weights.dtype
+    _min = torch.finfo(dtype).min
 
     attn_stationary = stationary_query_states.matmul(
         stationary_key_states.transpose(-1, -2)
@@ -55,37 +62,130 @@ def detailed_lambda_attention(
         attn_weights = attn_weights + attention_mask[:, 0]
         attn_weights = torch.max(
             attn_weights,
-            torch.tensor(torch.finfo(attn_weights.dtype).min,
-                         device=device)
+            torch.tensor(_min, device=device)
         )
+    lambda_mask = torch.ones_like(attn_weights).to(bool)
+    lambda_mask = lambda_mask.tril(
+        -local_branch+kv_seq_len-q_len)
+    lambda_mask[..., :global_branch] = False
+    last_line_attn_weights = attn_weights[..., -1, None, :].clone()
+    attn_weights.masked_fill_(
+        lambda_mask, _min)
+    # last_line_attn_weights.shape == [bs, heads, 1, kv_seq_len]
 
-    if top_k_attention is not None:
-        lambda_mask = torch.ones_like(attn_weights).to(bool)
-        lambda_mask = lambda_mask.tril(
-            -local_branch+kv_seq_len-q_len)
-        lambda_mask[..., :global_branch] = False
-        attn_weights.masked_fill_(
-            lambda_mask, torch.finfo(attn_weights.dtype).min)
+    col_high = - top_k_insert_at + kv_seq_len
+    if top_k_attention is not None and \
+            top_k_from_layer <= layer_i and top_k_to_layer > layer_i and \
+            col_high >= global_branch + top_k_attention:
 
-        line_i = q_len - 1
-        col_high = line_i - local_branch + 1 + kv_seq_len - q_len
-        if top_k_from_layer <= layer_i and top_k_to_layer > layer_i and \
-                col_high >= global_branch + top_k_attention:
-            near_query_states = \
+        # virtual attention to calculate the top-k
+        if "top_agnostic" in shuffle_policy or \
+                "top_max" in shuffle_policy:
+            agnostic_query_states = \
                 (query_states * cos[0, top_k_insert_at]) + \
                 (rotate_half(query_states) * sin[0, top_k_insert_at])
-            near_attention = near_query_states[..., line_i, None, :].matmul(
-                stationary_key_states.transpose(-1, -2)
-            ) / math.sqrt(head_dim)
-            line_attention = near_attention[..., global_branch: col_high]
-            top_k_indices = torch.topk(
-                line_attention, top_k_attention, dim=-1)[1]
-            top_k_mask = torch.ones_like(line_attention).to(bool)
+            agnostic_attention = agnostic_query_states[
+                ..., -1, None, :].matmul(
+                    key_states.transpose(-1, -2)
+                ) / math.sqrt(head_dim)
+            if "certain_heads=" in ",".join(shuffle_policy):
+                certain_heads = next(filter(
+                    lambda x: "certain_heads=" in x,
+                    shuffle_policy))
+                certain_heads = certain_heads.split("=")[1].split(":")
+                certain_heads = list(map(
+                    lambda x: int(x.split("-")[1]),
+                    filter(
+                        lambda x: x.split("-")[0] == str(layer_i),
+                        certain_heads
+                    )
+                ))
+                virtual_attention = last_line_attn_weights.clone()
+                for head_i in certain_heads:
+                    virtual_attention[:, head_i] = \
+                        agnostic_attention[:, head_i]
+            else:
+                virtual_attention = agnostic_attention
+            if "top_max" in shuffle_policy:
+                virtual_attention = virtual_attention.max(
+                    last_line_attn_weights)
+        elif "top_positional_limited" in shuffle_policy:
+            virtual_attention = last_line_attn_weights
+        else:
+            raise ValueError("Invalid shuffle_policy")
+
+        virtual_attention = virtual_attention[..., global_branch: col_high]
+        _, top_k_indices = torch.topk(
+            virtual_attention, top_k_attention, dim=-1)
+        # top_k_indices.shape == [bs, heads, 1, top_k_attention]
+
+        if "reorder_top_k" in shuffle_policy or \
+                "squash_top_k" in shuffle_policy:
+            # Reorder the key, query, and value states
+            # shape == [bs, heads, top_k_attention, head_dim]
+            if "squash_top_k" in shuffle_policy:
+                top_k_indices, _ = top_k_indices.sort(-1)
+                top_k_indices = top_k_indices.flip(-1)
+            reordered_key_states = torch.take_along_dim(
+                key_states,
+                top_k_indices.flip(-1)[:, :, 0, :, None]+global_branch,
+                dim=2)
+            reordered_key_states = (
+                reordered_key_states*cos[0, :top_k_attention] +
+                rotate_half(reordered_key_states)*sin[0, :top_k_attention]
+            )
+            reordered_query_states = (
+                query_states * cos[0, top_k_attention+top_k_insert_at-1] +
+                rotate_half(query_states) *
+                sin[0, top_k_attention+top_k_insert_at-1]
+            )
+            reordered_value_states = torch.take_along_dim(
+                value_states,
+                top_k_indices.flip(-1)[:, :, 0, :, None]+global_branch,
+                dim=2
+            )
+
+            # calculate the reordered attention
+            reordered_attention = \
+                reordered_query_states.matmul(
+                    reordered_key_states.transpose(-1, -2)
+                ).squeeze(2) / math.sqrt(head_dim)
+            # reordered_attention.shape == [bs, heads, top_k_attention]
+            attn_weights[..., -1, global_branch:col_high] = \
+                _min
+            attn_weights[..., -1, col_high-top_k_attention:col_high] = \
+                reordered_attention
+
+            # calculate the vanilla output
+            output1 = torch.matmul(
+                F.softmax(
+                    attn_weights[..., :-1], dim=-1,
+                    dtype=torch.float32).to(dtype),
+                value_states
+            ) if q_len > 1 else value_states[:, :, :0]
+
+            # calculate the reordered output
+            value_states = value_states.clone()
+            value_states[:, :, col_high-top_k_attention: col_high] = \
+                reordered_value_states
+            output2 = torch.matmul(
+                F.softmax(
+                    attn_weights[:, :, -1:],
+                    dim=-1, dtype=torch.float32).to(dtype),
+                value_states
+            )
+
+            return torch.cat((output1, output2), dim=-2)
+
+        elif "select_top_k" in shuffle_policy:
+            top_k_mask = torch.ones_like(virtual_attention).to(bool)
             top_k_mask.scatter_(-1, top_k_indices, 0)
-            attn_weights[..., line_i, global_branch: col_high] = \
-                line_attention.masked_fill(
-                    top_k_mask, torch.finfo(line_attention.dtype).min
+            attn_weights[..., -1, global_branch: col_high] = \
+                virtual_attention.masked_fill(
+                    top_k_mask, _min
                 ).squeeze(2)
+        else:
+            raise ValueError("Invalid shuffle_policy")
 
     return torch.matmul(
         F.softmax(
@@ -98,7 +198,8 @@ def detailed_lambda_attention(
 def attn_forward_factory(
     self, use_lambda_mask, local_branch, global_branch,
     limit_distance,
-    top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer, layer_i
+    top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
+    shuffle_policy, layer_i
 ):
 
     def limited_distance_forward(
@@ -185,7 +286,8 @@ def attn_forward_factory(
                 global_branch, local_branch,
                 limit_distance,
                 top_k_attention, top_k_insert_at,
-                top_k_from_layer, top_k_to_layer, layer_i
+                top_k_from_layer, top_k_to_layer,
+                shuffle_policy, layer_i
             ).squeeze(2)
 
         elif use_lambda_mask:
@@ -213,20 +315,35 @@ def attn_forward_factory(
 
         # If not use_lambda_mask, we use a costlier implementation
         else:
-            for head_i in range(self.num_heads):
-                query_states[:, head_i] = detailed_lambda_attention(
-                    query_states[:, head_i], key_states[:, head_i],
-                    value_states[:, head_i],
-                    rot_query_states[:, head_i], rot_key_states[:, head_i],
-                    stationary_query_states[:, head_i],
-                    stationary_key_states[:, head_i],
-                    cos, sin, attention_mask, self.head_dim, device, dtype,
-                    q_len, kv_seq_len,
-                    global_branch, local_branch,
-                    limit_distance,
-                    top_k_attention, top_k_insert_at,
-                    top_k_from_layer, top_k_to_layer, layer_i
-                )
+            query_states = detailed_lambda_attention(
+                query_states, key_states,
+                value_states,
+                rot_query_states, rot_key_states,
+                stationary_query_states,
+                stationary_key_states,
+                cos, sin, attention_mask, self.head_dim, device, dtype,
+                q_len, kv_seq_len,
+                global_branch, local_branch,
+                limit_distance,
+                top_k_attention, top_k_insert_at,
+                top_k_from_layer, top_k_to_layer,
+                shuffle_policy, layer_i
+            )
+            # for head_i in range(self.num_heads):
+            #     query_states[:, head_i] = detailed_lambda_attention(
+            #         query_states[:, head_i], key_states[:, head_i],
+            #         value_states[:, head_i],
+            #         rot_query_states[:, head_i], rot_key_states[:, head_i],
+            #         stationary_query_states[:, head_i],
+            #         stationary_key_states[:, head_i],
+            #         cos, sin, attention_mask, self.head_dim, device, dtype,
+            #         q_len, kv_seq_len,
+            #         global_branch, local_branch,
+            #         limit_distance,
+            #         top_k_attention, top_k_insert_at,
+            #         top_k_from_layer, top_k_to_layer,
+            #         shuffle_policy, layer_i
+            #     )
 
         attn_output = query_states
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -237,7 +354,6 @@ def attn_forward_factory(
 
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -256,7 +372,8 @@ class LLAMA_Model(Model_Base):
         load_in_4bit, device_map,
         use_lambda_mask, local_branch, global_branch,
         limit_distance,
-        top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer
+        top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
+        shuffle_policy
     ):
         super().__init__(max_length, truncation_side)
         self.tokenizer = LlamaTokenizer.from_pretrained(tokenizer_path)
@@ -278,6 +395,7 @@ class LLAMA_Model(Model_Base):
         self.top_k_insert_at = top_k_insert_at
         self.top_k_from_layer = top_k_from_layer
         self.top_k_to_layer = top_k_to_layer
+        self.shuffle_policy = shuffle_policy
 
         for layer_i, hidden_layer in enumerate(self.model.model.layers):
             attn = hidden_layer.self_attn
@@ -286,7 +404,7 @@ class LLAMA_Model(Model_Base):
                 limit_distance,
                 top_k_attention, top_k_insert_at,
                 top_k_from_layer, top_k_to_layer,
-                layer_i
+                shuffle_policy, layer_i
             )
 
         if use_lambda_mask:
