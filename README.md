@@ -1,9 +1,24 @@
 
-# LM-Infinite
+# LM-Infinite: Zero-Shot Extreme Length Generalization for Large Language Models
 
 
+## Table of Contents
 
-
+- [Introduction](#introduction)
+- [:tada::tada::tada: Now A Drop-in Replacement for HuggingFace Transformers!](#tada-tada-tada-now-a-drop-in-replacement-for-huggingface-transformers)
+- [Requirements](#requirements)
+- [Directory Structure](#directory-structure)
+- [Usage](#usage)
+  - [Data Preparation](#data-preparation)
+  - [Model Preparation](#model-preparation)
+  - [Evaluation](#evaluation)
+    - [Perplexity](#perplexity)
+    - [Evaluating Perplexity at Extreme Lengths](#evaluating-perplexity-at-extreme-lengths)
+    - [Generation](#generation)
+    - [Evaluation Downstream Tasks](#evaluation-downstream-tasks)
+      - [Passkey Retrieval](#passkey-retrieval)
+      - [Qasper](#qasper)
+- [Citation](#citation)
 
 
 ## Introduction
@@ -13,12 +28,20 @@ This is reproduction of the paper
 in PyTorch.
 The work is done by [Chi Han](https://glaciohound.github.io), Qifan Wang, Hao Peng, Wenhan Xiong, Yu Chen, Heng Ji, Sinong Wang.
 
-In this paper, the authors propose a simple method, called LM-Infinite, to improve the length generalization of large language models to as long as 128k tokens, without any additional training or parameter updates.
+
+In this paper, the authors propose a simple method, called LM-Infinite, to improve the length generalization of large language models to an extreme length of **200M** tokens, without any additional training or parameter updates.
+
+![](assets/diagnosis.jpg)
+
+We are motivatedby first identifying three factors underlying the length generalization failure in LLMs: **(a)** Factor 1: Unseen distances between tokens cause attention logits to explode. **(b)** Factor 2: An unseen number of tokens can cause attention entropy to increase beyond the training range as the length increases. **(c)** Factor 3: Starting few tokens occupy a distinct feature region and should not be discarded.
+
+![](assets/overview.jpg)
+
 The key idea is to use (1) a $\Lambda$-shaped attention pattern, so that each token only attends to the nearest $L_{pretrain}$ tokens as well as a few starting tokens, and (2) a distance limit $L_{pretrain}$, so that the attention distance is capped at $L_{pretrain}$.
 The proposed method is compatible with multiple state-of-the-art language models, including but not limited to LLaMA, Llama-2, GPT-J, MPT-7B series.
 LM-Infinite is also computational efficient, with only $O(n)$ time complexity.
 
-
+![](assets/perplexity_128k.jpg)
 
 
 ## :tada::tada::tada: Now A Drop-in Replacement for HuggingFace Transformers!
@@ -327,10 +350,11 @@ PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $
 ## Citation
 
 ```
-@article{han2023lminfinite,
+@inproceedings{han2024lm,
   title={LM-Infinite: Zero-Shot Extreme Length Generalization for Large Language Models},
-  author={Han, Chi and Wang, Qifan and Hao Peng and Xiong, Wenhan and Chen, Yu and Ji, Heng and Wang, Sinong},
-  journal={arXiv preprint arXiv:2308.16137},
-  year={2023}
+  author={Han, Chi and Wang, Qifan and Peng, Hao and Xiong, Wenhan and Chen, Yu and Ji, Heng and Wang, Sinong},
+  booktitle={Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers)},
+  pages={3991--4008},
+  year={2024}
 }
 ```
