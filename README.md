@@ -216,7 +216,7 @@ TRIAL=llama2-infinite-ArXiv
 mkdir -p $LOG_DIR/$TRIAL
 CUDA_VISIBLE_DEVICES=0
 MASTER_PORT=$(shuf -i 29500-65535 -n 1)
-PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_ppl_deepspeed.py \
+DS_SKIP_CUDA_CHECK=1 PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_ppl_deepspeed.py \
     --deepspeed_config configs/zero3_efficient_config.json \
     --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
     --use_lambda_attention --local_branch 4096 --global_branch 100 --limit_distance 4096 \
@@ -252,7 +252,7 @@ CUDA_VISIBLE_DEVICES=0
 MASTER_PORT=$(shuf -i 29500-65535 -n 1)
 echo port: $MASTER_PORT
 mkdir -p $LOG_DIR/$TRIAL
-PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_infinite_ppl.py \
+DS_SKIP_CUDA_CHECK=1 PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_infinite_ppl.py \
     --deepspeed_config configs/zero3_efficient_config.json \
     --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
     --use_lambda_attention --local_branch 4096 --global_branch 10 --limit_distance 4096 \
@@ -274,7 +274,7 @@ TRIAL=llama2-infinite-generate-ArXiv
 mkdir -p $LOG_DIR/$TRIAL
 CUDA_VISIBLE_DEVICES=0
 MASTER_PORT=$(shuf -i 29500-65535 -n 1)
-PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_generation.py \
+DS_SKIP_CUDA_CHECK=1 PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_generation.py \
     --deepspeed_config configs/zero3_efficient_config.json \
     --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
     --use_lambda_attention --local_branch 4096 --global_branch 100 --limit_distance 4096 \
@@ -311,7 +311,7 @@ for MAX_LENGTH in 6144 8192 10240 12288 16384; do
     TRIAL=llama2-infinite-passkey-$MAX_LENGTH
     mkdir -p $LOG_DIR/$TRIAL
     MASTER_PORT=$(shuf -i 29500-65535 -n 1)
-    PYTHONPATH=. deepspeed --master_port $MASTER_PORT --include localhost:$CUDA_VISIBLE_DEVICES scripts/eval_downstream_tasks.py \
+    DS_SKIP_CUDA_CHECK=1 PYTHONPATH=. deepspeed --master_port $MASTER_PORT --include localhost:$CUDA_VISIBLE_DEVICES scripts/eval_downstream_tasks.py \
         --deepspeed_config configs/zero3_efficient_config.json \
         --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
         --use_lambda_attention --local_branch 4096 --global_branch 10 --limit_distance 4096 --triangle_offset 0 \
@@ -336,7 +336,7 @@ TRIAL=llama2-infinite-$DATASET
 mkdir -p $LOG_DIR/$TRIAL
 MASTER_PORT=$(shuf -i 29500-65535 -n 1)
 echo port: $MASTER_PORT
-PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_downstream_tasks.py \
+DS_SKIP_CUDA_CHECK=1 PYTHONPATH=. deepspeed --include localhost:$CUDA_VISIBLE_DEVICES --master_port $MASTER_PORT scripts/eval_downstream_tasks.py \
     --deepspeed_config configs/zero3_efficient_config_large.json \
     --model ${PATH_TO_LLAMA2_CHECKPOINTS}/llama-2-7b-hf --tokenizer_path ${PATH_TO_LLAMA2_CHECKPOINTS} \
     --use_lambda_attention --local_branch 4096 --global_branch 10 --limit_distance 4096 --triangle_offset 0 \
