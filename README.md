@@ -1,6 +1,13 @@
 
 # LM-Infinite: Zero-Shot Extreme Length Generalization for Large Language Models
 
+[![arXiv](https://img.shields.io/badge/arXiv-2308.16137-b31b1b.svg)](https://arxiv.org/abs/2308.16137)
+[![NAACL 2024 Outstanding Paper Award](https://img.shields.io/badge/NAACL%202024-Outstanding%20Paper%20Award-ffcc00.svg)](https://2024.naacl.org/awards/)
+
+This is the codes of the paper
+[LM-Infinite: Zero-Shot Extreme Length Generalization for Large Language Models](https://arxiv.org/abs/2308.16137)
+**(NAACL 2024 Outstanding Paper award)** in PyTorch.
+The work is done by [Chi Han](https://glaciohound.github.io), Qifan Wang, Hao Peng, Wenhan Xiong, Yu Chen, Heng Ji, Sinong Wang.
 
 ## Table of Contents
 
@@ -23,10 +30,6 @@
 
 ## Introduction
 
-This is reproduction of the paper
-[LM-Infinite: Zero-Shot Extreme Length Generalization for Large Language Models](https://arxiv.org/abs/2308.16137)
-in PyTorch.
-The work is done by [Chi Han](https://glaciohound.github.io), Qifan Wang, Hao Peng, Wenhan Xiong, Yu Chen, Heng Ji, Sinong Wang.
 
 
 In this paper, the authors propose a simple method, called LM-Infinite, to improve the length generalization of large language models to an extreme length of **200M** tokens, without any additional training or parameter updates.
