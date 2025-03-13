@@ -37,7 +37,7 @@ def main(args):
         args.local_branch, args.global_branch,
         args.limit_distance, args.constant_answer,
         args.top_k_attention, args.top_k_insert_at,
-        args.top_k_from_layer, args.top_k_to_layer)
+        args.top_k_from_layer, args.top_k_to_layer, args.shuffle_policy)
     dataloader = DataLoader(data, batch_size=args.batch_size, shuffle=False,
                             collate_fn=model.tokenize)
 

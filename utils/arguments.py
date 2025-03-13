@@ -71,4 +71,5 @@ def parse_args():
         if args.shuffle_policy else []
 
     set_seed(args.seed)
+    print(args)
     return args

@@ -28,7 +28,9 @@ def get_model(
             top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
             shuffle_policy
         )
-    elif "llama-2" in model_name_or_path or "llama2" in model_name_or_path:
+    elif any([x in model_name_or_path for x in
+              ("llama-2", "llama2", "Llama-3")
+              ]):
         model = LLAMA_Model(
             model_name_or_path, tokenizer_path, max_length, truncation_side,
             load_in_4bit, device_map, *hack_args,

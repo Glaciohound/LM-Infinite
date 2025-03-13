@@ -43,6 +43,31 @@ def detailed_lambda_attention(
     # cos/sin.shape == [1, kv_seq_len, head_dim]
     attn_weights = rot_query_states.matmul(
         rot_key_states.transpose(-1, -2)) / math.sqrt(head_dim)
+    # FIXME: experimental
+    if len(shuffle_policy) > 0 and \
+            shuffle_policy[0].startswith("k_q_simplify") and (
+                str(layer_i) in shuffle_policy[0].split("=")[1].split(":")
+                or "all" in shuffle_policy[0].split("=")[1].split(":")
+            ):
+        assert top_k_attention is None
+        mean_cos = cos[0].mean(0)
+        mean_sin = sin[0].mean(0)
+        mean_k = key_states[0].mean(1)
+        mean_q = query_states[0].mean(1)
+        mean_rot_q = mean_q * mean_cos + rotate_half(mean_q) * mean_sin
+        semantic = mean_rot_q[:, None].matmul(
+            key_states[0].transpose(-1, -2)) / math.sqrt(head_dim)
+        simple_logits = semantic.repeat(1, kv_seq_len, 1)
+        position_ids = torch.arange(kv_seq_len, device=device)[None]
+        position = apply_rotary_pos_emb(
+                mean_q[None, :, None], cos, sin, position_ids)[0].matmul(
+                    mean_k[..., None]
+                ).squeeze(-1) / math.sqrt(head_dim)
+        for i in range(kv_seq_len):
+            simple_logits[:, i, :i+1] += position[:, :i+1].flip(-1)
+        attn_weights = simple_logits[None]
+        # attn_weights = torch.randn_like(attn_weights)
+
     # attn_weights.shape == [bs, heads, q_len, kv_seq_len]
     dtype = attn_weights.dtype
     _min = torch.finfo(dtype).min
@@ -196,7 +221,7 @@ def detailed_lambda_attention(
 
 # Efficient implementation using `models/lambda_attention.py`
 def attn_forward_factory(
-    self, use_lambda_mask, local_branch, global_branch,
+    self, use_lambda_attention, local_branch, global_branch,
     limit_distance,
     top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
     shuffle_policy, layer_i
@@ -214,11 +239,22 @@ def attn_forward_factory(
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        # query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        # key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        # value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         dtype = query_states.dtype
         device = query_states.device
+
+        if key_states.shape[-3] != self.num_heads:
+            group_ratio = self.num_heads // key_states.size(-3)
+            key_states = key_states.repeat_interleave(group_ratio, -3)
+            value_states = value_states.repeat_interleave(group_ratio, -3)
 
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
@@ -238,7 +274,6 @@ def attn_forward_factory(
             query_states, cos, sin, position_ids)
         rot_key_states = apply_rotary_pos_emb(
             key_states, cos, sin, key_position_ids)
-
         if limit_distance is None:
             stationary_key_states = rot_key_states
             stationary_query_states = rot_query_states
@@ -249,9 +284,21 @@ def attn_forward_factory(
                 (query_states * cos[0, effective_limit_distance]) + \
                 (rotate_half(query_states) * sin[0, effective_limit_distance])
 
+        # # FIXME: remove this
+        # import pickle
+        # filename = f"key_query_{layer_i}.pkl"
+        # dict_to_save = {
+        #     "query_states": query_states.cpu().numpy(),
+        #     "key_states": key_states.cpu().numpy(),
+        #     "cos": cos.cpu().numpy(),
+        #     "sin": sin.cpu().numpy(),
+        # }
+        # with open(filename, "wb") as f:
+        #     pickle.dump(dict_to_save, f)
+
         headwise_limit = 33000  # magic number set for A100 GPU
-        # If use_lambda_mask, we can use an efficient implementation
-        if use_lambda_mask and top_k_attention is not None:
+        # If use_lambda_attention, we can use an efficient implementation
+        if use_lambda_attention and top_k_attention is not None:
             if q_len > headwise_limit:
                 for head_i in range(self.num_heads):
                     query_states[:, head_i, :-1] = (
@@ -280,7 +327,9 @@ def attn_forward_factory(
                 rot_query_states[:, :, -1, None], rot_key_states,
                 stationary_query_states[:, :, -1, None], stationary_key_states,
                 cos, sin,
-                None if position_ids is None else attention_mask[:, :, -1, None],
+                None if position_ids is None else
+                attention_mask[:, :, -1, None] if attention_mask is not None
+                else None,
                 self.head_dim, device, dtype,
                 1, kv_seq_len,
                 global_branch, local_branch,
@@ -290,7 +339,7 @@ def attn_forward_factory(
                 shuffle_policy, layer_i
             ).squeeze(2)
 
-        elif use_lambda_mask:
+        elif use_lambda_attention:
             if q_len > headwise_limit:
                 for head_i in range(self.num_heads):
                     query_states[:, head_i] = (
@@ -313,7 +362,7 @@ def attn_forward_factory(
                     ) / math.sqrt(self.head_dim)
                  ).softmax().matmul(value_states)
 
-        # If not use_lambda_mask, we use a costlier implementation
+        # If not use_lambda_attention, we use a costlier implementation
         else:
             query_states = detailed_lambda_attention(
                 query_states, key_states,
@@ -370,7 +419,7 @@ class LLAMA_Model(Model_Base):
     def __init__(
         self, model_name_or_path, tokenizer_path, max_length, truncation_side,
         load_in_4bit, device_map,
-        use_lambda_mask, local_branch, global_branch,
+        use_lambda_attention, local_branch, global_branch,
         limit_distance,
         top_k_attention, top_k_insert_at, top_k_from_layer, top_k_to_layer,
         shuffle_policy
@@ -387,7 +436,7 @@ class LLAMA_Model(Model_Base):
         self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
         # hack arguments
-        self.use_lambda_mask = use_lambda_mask
+        self.use_lambda_attention = use_lambda_attention
         self.local_branch = local_branch
         self.global_branch = global_branch
         self.limit_distance = limit_distance
@@ -400,14 +449,14 @@ class LLAMA_Model(Model_Base):
         for layer_i, hidden_layer in enumerate(self.model.model.layers):
             attn = hidden_layer.self_attn
             attn.forward = attn_forward_factory(
-                attn, use_lambda_mask, local_branch, global_branch,
+                attn, use_lambda_attention, local_branch, global_branch,
                 limit_distance,
                 top_k_attention, top_k_insert_at,
                 top_k_from_layer, top_k_to_layer,
                 shuffle_policy, layer_i
             )
 
-        if use_lambda_mask:
+        if use_lambda_attention:
             self.model.model._prepare_decoder_attention_mask = \
                 lambda *args, **kwargs: None
 
